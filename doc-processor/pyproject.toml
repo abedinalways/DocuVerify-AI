@@ -1,0 +1,17 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.pylint.main]
+extension-pkg-allow-list = ["cv2", "pymupdf"]
+generated-members = ["cv2.*", "pymupdf.*"]
+
+[tool.pylint.messages_control]
+disable = [
+    "missing-module-docstring",
+    "missing-class-docstring",
+    "missing-function-docstring",
+]
+
+[tool.pylint.format]
+max-line-length = 100
