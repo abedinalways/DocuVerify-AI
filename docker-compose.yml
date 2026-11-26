@@ -32,6 +32,20 @@ services:
       timeout: 5s
       retries: 5
 
+  doc-processor:
+    build:
+      context: ./doc-processor
+      dockerfile: Dockerfile
+    container_name: docuverify-doc-processor
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
   redis_data:
