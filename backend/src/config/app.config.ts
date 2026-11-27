@@ -9,6 +9,9 @@ export interface AppConfig {
   llm: {
     provider: string;
     geminiApiKey: string;
+    geminiExtractionModel: string;
+    geminiFallbackModels: string[];
+    geminiEmbeddingModel: string;
   };
   storageDir: string;
 }
@@ -25,6 +28,14 @@ export const loadAppConfig = (): { app: AppConfig } => ({
     llm: {
       provider: process.env.LLM_PROVIDER || 'gemini',
       geminiApiKey: process.env.GEMINI_API_KEY ?? '',
+      geminiExtractionModel: process.env.GEMINI_EXTRACTION_MODEL || 'gemini-3.5-flash-lite',
+      geminiFallbackModels: (
+        process.env.GEMINI_FALLBACK_MODELS || 'gemini-3.1-flash-lite,gemini-3.8-flash,gemini-3.5-flash'
+      )
+        .split(',')
+        .map((m) => m.trim())
+        .filter(Boolean),
+      geminiEmbeddingModel: process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001',
     },
     storageDir: process.env.UPLOAD_STORAGE_DIR || './uploads',
   },
