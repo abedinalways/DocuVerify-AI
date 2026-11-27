@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { DocumentStatus, DocumentType } from '@prisma/client';
 import { StorageService } from '../storage/storage.service';
 import { DocumentsRepository } from './documents.repository';
@@ -12,11 +12,14 @@ describe('DocumentsService', () => {
     findMany: jest.fn(),
     findById: jest.fn(),
     findContentByDocumentId: jest.fn(),
+    updateProcessingState: jest.fn(),
+    appendLog: jest.fn(),
   } as unknown as DocumentsRepository;
 
   const mockStorage = {
     removeFile: jest.fn(),
     inspectFile: jest.fn(),
+    fileExists: jest.fn(),
   } as unknown as StorageService;
 
   const mockDispatcher: DocumentJobDispatcher = {
@@ -90,5 +93,53 @@ describe('DocumentsService', () => {
     (mockRepository.findById as jest.Mock).mockResolvedValue(null);
     const service = new DocumentsService(mockRepository, mockStorage);
     await expect(service.getDocumentById('missing-id')).rejects.toThrow(NotFoundException);
+  });
+
+  it('rejects reprocessing when document is currently processing', async () => {
+    (mockRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'doc-busy',
+      status: DocumentStatus.PROCESSING,
+      storagePath: '/uploads/busy.pdf',
+    });
+
+    const service = new DocumentsService(mockRepository, mockStorage, mockDispatcher);
+    await expect(service.reprocessDocument('doc-busy')).rejects.toThrow(ConflictException);
+  });
+
+  it('resets state and re-enqueues failed document for reprocessing', async () => {
+    (mockRepository.findById as jest.Mock).mockResolvedValue({
+      id: 'doc-failed',
+      status: DocumentStatus.FAILED,
+      storagePath: '/uploads/failed.pdf',
+    });
+    (mockStorage.fileExists as jest.Mock).mockResolvedValue(true);
+    (mockRepository.updateProcessingState as jest.Mock).mockResolvedValue({
+      id: 'doc-failed',
+      originalFilename: 'failed.pdf',
+      storagePath: '/uploads/failed.pdf',
+      mimeType: 'application/pdf',
+      fileExtension: '.pdf',
+      documentType: DocumentType.PDF,
+      fileSizeBytes: BigInt(100),
+      sha256Hash: 'hash',
+      status: DocumentStatus.PENDING,
+      progressPercent: 0,
+      pageCount: null,
+      processedPages: 0,
+      extractionMethod: null,
+      ocrConfidence: null,
+      processingTimeMs: null,
+      lastError: null,
+      warnings: [],
+      createdAt: new Date('2026-11-27T00:00:00Z'),
+      updatedAt: new Date('2026-11-27T00:00:00Z'),
+      processedAt: null,
+    });
+
+    const service = new DocumentsService(mockRepository, mockStorage, mockDispatcher);
+    const result = await service.reprocessDocument('doc-failed');
+
+    expect(result.status).toBe(DocumentStatus.PENDING);
+    expect(mockDispatcher.enqueueProcessing).toHaveBeenCalledWith('doc-failed');
   });
 });

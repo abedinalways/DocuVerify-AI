@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
+import { QueueDispatcherModule } from '../queue/queue-dispatcher.module';
 import { StorageModule } from '../storage/storage.module';
 import { StorageService } from '../storage/storage.service';
 import { MAX_FILE_SIZE_BYTES } from './documents.constants';
@@ -11,6 +12,7 @@ import { DocumentsService } from './documents.service';
 @Module({
   imports: [
     StorageModule,
+    QueueDispatcherModule,
     MulterModule.registerAsync({
       imports: [StorageModule],
       inject: [StorageService],

@@ -1,10 +1,13 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { DocumentStatus, ProcessingStage, StageStatus } from '@prisma/client';
 import { StorageService } from '../storage/storage.service';
 import {
   extractNormalizedExtension,
@@ -99,6 +102,44 @@ export class DocumentsService {
       pages: content?.pagesJson ?? null,
       sheets: content?.sheetsJson ?? null,
     };
+  }
+
+  async reprocessDocument(id: string) {
+    const doc = await this.repository.findById(id);
+    if (!doc) {
+      throw new NotFoundException(`Document '${id}' was not found.`);
+    }
+
+    if (doc.status === DocumentStatus.PROCESSING) {
+      throw new ConflictException(`Document '${id}' is already being processed.`);
+    }
+
+    if (!this.jobDispatcher) {
+      throw new ServiceUnavailableException('Background processing queue is unavailable.');
+    }
+
+    const exists = await this.storageService.fileExists(doc.storagePath);
+    if (!exists) {
+      throw new NotFoundException(`Source file for document '${id}' is missing from storage.`);
+    }
+
+    const updated = await this.repository.updateProcessingState(id, {
+      status: DocumentStatus.PENDING,
+      progressPercent: 0,
+      processedPages: 0,
+      lastError: null,
+      processedAt: null,
+    });
+
+    await this.repository.appendLog({
+      documentId: id,
+      stage: ProcessingStage.REPROCESS,
+      status: StageStatus.STARTED,
+      message: 'Document queued for reprocessing.',
+    });
+
+    await this.jobDispatcher.enqueueProcessing(id);
+    return toDocumentSummaryDto(updated);
   }
 
   private async registerSingleFile(file: Express.Multer.File) {

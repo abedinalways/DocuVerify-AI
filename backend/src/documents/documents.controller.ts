@@ -48,4 +48,9 @@ export class DocumentsController {
   getDocumentContent(@Param('id', ParseUUIDPipe) id: string) {
     return this.documentsService.getDocumentContent(id);
   }
+
+  @Post(':id/reprocess')
+  reprocessDocument(@Param('id', ParseUUIDPipe) id: string) {
+    return this.documentsService.reprocessDocument(id);
+  }
 }

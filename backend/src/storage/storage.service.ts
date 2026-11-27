@@ -2,7 +2,7 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { AppConfig } from '../config/app.config';
 
@@ -75,6 +75,15 @@ export class StorageService implements OnModuleInit {
 
   async readBuffer(filePath: string): Promise<Buffer> {
     return readFile(filePath);
+  }
+
+  async fileExists(filePath: string): Promise<boolean> {
+    try {
+      await access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async removeFile(filePath: string): Promise<void> {
