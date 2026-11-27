@@ -49,6 +49,11 @@ export class DocumentsController {
     return this.documentsService.getDocumentContent(id);
   }
 
+  @Get(':id/invoices')
+  getDocumentInvoices(@Param('id', ParseUUIDPipe) id: string) {
+    return this.documentsService.getDocumentInvoices(id);
+  }
+
   @Post(':id/reprocess')
   reprocessDocument(@Param('id', ParseUUIDPipe) id: string) {
     return this.documentsService.reprocessDocument(id);

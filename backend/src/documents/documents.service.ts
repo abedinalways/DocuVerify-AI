@@ -104,6 +104,15 @@ export class DocumentsService {
     };
   }
 
+  async getDocumentInvoices(id: string) {
+    const detail = await this.getDocumentById(id);
+    return {
+      documentId: id,
+      status: detail.status,
+      invoices: detail.extractedInvoices,
+    };
+  }
+
   async reprocessDocument(id: string) {
     const doc = await this.repository.findById(id);
     if (!doc) {

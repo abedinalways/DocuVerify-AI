@@ -9,6 +9,7 @@ export interface DocumentJobPayload {
 
 export interface ParsedDocumentSummary {
   documentId: string;
+  filename: string;
   rawText: string;
   pageCount: number;
   extractionMethod: ExtractionMethod;

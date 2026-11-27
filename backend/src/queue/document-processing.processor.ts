@@ -88,6 +88,7 @@ export class DocumentProcessingProcessor extends WorkerHost {
       const mergedWarnings = this.mergeUniqueWarnings(doc.warnings, parsed.warnings);
       const finalStatus = await this.runPostProcessors({
         documentId,
+        filename: doc.originalFilename,
         rawText: parsed.rawText,
         pageCount: parsed.pageCount,
         extractionMethod: parsed.extractionMethod,
