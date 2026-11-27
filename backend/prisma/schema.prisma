@@ -1,0 +1,233 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DocumentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  NEEDS_REVIEW
+}
+
+enum DocumentType {
+  PDF
+  IMAGE
+  SPREADSHEET
+}
+
+enum ExtractionMethod {
+  DIGITAL_TEXT
+  OCR
+  HYBRID
+  SPREADSHEET_PARSER
+}
+
+enum ValidationSeverity {
+  INFO
+  WARNING
+  ERROR
+}
+
+enum ValidationStatus {
+  OPEN
+  RESOLVED
+  IGNORED
+}
+
+enum CrossVerifyType {
+  PDF_TO_PDF
+  PDF_TO_EXCEL
+}
+
+enum CrossVerifyStatus {
+  MATCHED
+  PARTIAL_MATCH
+  MISMATCH
+  ERROR
+}
+
+enum ProcessingStage {
+  UPLOAD
+  DOCUMENT_PARSING
+  AI_EXTRACTION
+  EMBEDDING
+  VALIDATION
+  CROSS_VERIFICATION
+  MANUAL_CORRECTION
+  REPROCESS
+}
+
+enum StageStatus {
+  STARTED
+  SUCCEEDED
+  FAILED
+}
+
+model Document {
+  id               String            @id @default(uuid()) @db.Uuid
+  originalFilename String            @map("original_filename")
+  storagePath      String            @map("storage_path")
+  mimeType         String            @map("mime_type")
+  fileExtension    String            @map("file_extension")
+  documentType     DocumentType      @map("document_type")
+  fileSizeBytes    BigInt            @map("file_size_bytes")
+  sha256Hash       String?           @map("sha256_hash")
+  status           DocumentStatus    @default(PENDING)
+  progressPercent  Int               @default(0) @map("progress_percent")
+  pageCount        Int?              @map("page_count")
+  processedPages   Int               @default(0) @map("processed_pages")
+  extractionMethod ExtractionMethod? @map("extraction_method")
+  ocrConfidence    Float?            @map("ocr_confidence")
+  processingTimeMs Int?              @map("processing_time_ms")
+  lastError        String?           @map("last_error")
+  warnings         Json              @default("[]")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  processedAt      DateTime?         @map("processed_at")
+
+  content               DocumentContent?
+  extractedInvoices     ExtractedInvoice[]
+  validationIssues      ValidationIssue[]
+  processingLogs        ProcessingLog[]
+  sourceCrossVerifies   CrossVerification[] @relation("SourceDocument")
+  targetCrossVerifies   CrossVerification[] @relation("TargetDocument")
+
+  @@index([status])
+  @@index([sha256Hash])
+  @@index([documentType])
+  @@index([createdAt])
+  @@map("documents")
+}
+
+model DocumentContent {
+  id         String                        @id @default(uuid()) @db.Uuid
+  documentId String                        @unique @map("document_id") @db.Uuid
+  rawText    String                        @default("") @map("raw_text")
+  pagesJson  Json?                         @map("pages_json")
+  sheetsJson Json?                         @map("sheets_json")
+  embedding  Unsupported("vector(768)")?
+  createdAt  DateTime                      @default(now()) @map("created_at")
+  updatedAt  DateTime                      @updatedAt @map("updated_at")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("document_contents")
+}
+
+model ExtractedInvoice {
+  id                  String    @id @default(uuid()) @db.Uuid
+  documentId          String    @map("document_id") @db.Uuid
+  invoiceNumber       String?   @map("invoice_number")
+  invoiceDate         DateTime? @map("invoice_date") @db.Date
+  rawInvoiceDate      String?   @map("raw_invoice_date")
+  supplierName        String?   @map("supplier_name")
+  customerName        String?   @map("customer_name")
+  currency            String?
+  subtotal            Decimal?  @db.Decimal(14, 2)
+  tax                 Decimal?  @db.Decimal(14, 2)
+  total               Decimal?  @db.Decimal(14, 2)
+  lineItems           Json      @default("[]") @map("line_items")
+  confidenceMap       Json      @default("{}") @map("confidence_map")
+  rawAiResponse       Json?     @map("raw_ai_response")
+  isManuallyCorrected Boolean   @default(false) @map("is_manually_corrected")
+  correctedBy         String?   @map("corrected_by")
+  correctedAt         DateTime? @map("corrected_at")
+  sourcePageStart     Int?      @map("source_page_start")
+  sourcePageEnd       Int?      @map("source_page_end")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  document         Document            @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  corrections      InvoiceCorrection[]
+  validationIssues ValidationIssue[]
+
+  @@index([documentId])
+  @@index([invoiceNumber])
+  @@index([supplierName])
+  @@index([invoiceDate])
+  @@index([total])
+  @@map("extracted_invoices")
+}
+
+model InvoiceCorrection {
+  id                 String   @id @default(uuid()) @db.Uuid
+  extractedInvoiceId String   @map("extracted_invoice_id") @db.Uuid
+  fieldName          String   @map("field_name")
+  previousValue      Json?    @map("previous_value")
+  newValue           Json?    @map("new_value")
+  correctedBy        String?  @map("corrected_by")
+  reason             String?
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  extractedInvoice ExtractedInvoice @relation(fields: [extractedInvoiceId], references: [id], onDelete: Cascade)
+
+  @@index([extractedInvoiceId])
+  @@map("invoice_corrections")
+}
+
+model ValidationIssue {
+  id                 String             @id @default(uuid()) @db.Uuid
+  documentId         String             @map("document_id") @db.Uuid
+  extractedInvoiceId String?            @map("extracted_invoice_id") @db.Uuid
+  ruleCode           String             @map("rule_code")
+  fieldName          String?            @map("field_name")
+  severity           ValidationSeverity @default(ERROR)
+  status             ValidationStatus   @default(OPEN)
+  expectedValue      String?            @map("expected_value")
+  actualValue        String?            @map("actual_value")
+  message            String
+  createdAt          DateTime           @default(now()) @map("created_at")
+  resolvedAt         DateTime?          @map("resolved_at")
+
+  document         Document          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  extractedInvoice ExtractedInvoice? @relation(fields: [extractedInvoiceId], references: [id], onDelete: SetNull)
+
+  @@index([documentId])
+  @@index([status])
+  @@index([ruleCode])
+  @@map("validation_issues")
+}
+
+model CrossVerification {
+  id               String            @id @default(uuid()) @db.Uuid
+  sourceDocumentId String            @map("source_document_id") @db.Uuid
+  targetDocumentId String            @map("target_document_id") @db.Uuid
+  verificationType CrossVerifyType   @map("verification_type")
+  status           CrossVerifyStatus
+  matchScore       Float?            @map("match_score")
+  summary          String?
+  discrepancies    Json              @default("[]")
+  createdAt        DateTime          @default(now()) @map("created_at")
+
+  sourceDocument Document @relation("SourceDocument", fields: [sourceDocumentId], references: [id], onDelete: Cascade)
+  targetDocument Document @relation("TargetDocument", fields: [targetDocumentId], references: [id], onDelete: Cascade)
+
+  @@index([sourceDocumentId])
+  @@index([targetDocumentId])
+  @@index([verificationType])
+  @@map("cross_verifications")
+}
+
+model ProcessingLog {
+  id         String          @id @default(uuid()) @db.Uuid
+  documentId String          @map("document_id") @db.Uuid
+  stage      ProcessingStage
+  status     StageStatus
+  attempt    Int             @default(1)
+  durationMs Int?            @map("duration_ms")
+  message    String?
+  metadata   Json?
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([stage, status])
+  @@map("processing_logs")
+}
